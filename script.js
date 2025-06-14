@@ -29,7 +29,7 @@ function enviarCodigo() {
   
     if (senha === confirmar && senha.length > 0) {
       alert("Senha redefinida com sucesso!");
-      window.location.href = "Login.html";
+      window.location.href = "login.html";
     } else {
       alert("As senhas não coincidem ou estão vazias.");
     }
