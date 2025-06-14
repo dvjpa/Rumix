@@ -5,7 +5,7 @@ function enviarCodigo() {
       localStorage.setItem("codigo", codigo);
       localStorage.setItem("email", email);
       alert("Código enviado para " + email + ": " + codigo);
-      window.location.href = "Code Password.html";
+      window.location.href = "codepassword.html";
     } else {
       alert("Digite um email válido.");
     }
@@ -41,7 +41,7 @@ function enviarCodigo() {
   
     if (email && senha) {
       alert("Login bem-sucedido!");
-      window.location.href = "principal.html";
+      window.location.href = "index.html";
     } else {
       alert("Preencha os campos.");
     }
