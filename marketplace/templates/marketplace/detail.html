@@ -1,0 +1,156 @@
+{% extends 'rumix/base.html' %}
+
+{% block title %}{{ announcement.item.title }} - Rumix Comércio{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{% url 'marketplace:home' %}" class="btn btn-link text-success p-0 text-decoration-none">
+        <i class="fa-solid fa-arrow-left me-1"></i> Voltar para o Comércio
+    </a>
+</div>
+
+<div class="row g-4">
+    <!-- Coluna Esquerda: Informações do Item -->
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    {% if announcement.listing_type == 'SALE' %}
+                        <span class="badge bg-primary">Venda Direta</span>
+                    {% elif announcement.listing_type == 'EXCHANGE' %}
+                        <span class="badge bg-warning text-dark">Troca</span>
+                    {% else %}
+                        <span class="badge bg-danger">Leilão</span>
+                    {% endif %}
+                    <small class="text-muted">Publicado por <strong>{{ announcement.seller.username }}</strong></small>
+                </div>
+
+                <h2 class="fw-bold">{{ announcement.item.title }}</h2>
+                <hr>
+
+                <h5 class="fw-bold mb-2">Descrição</h5>
+                <p class="text-secondary" style="white-space: pre-line;">{{ announcement.item.description }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Coluna Direita: Painel de Ação (Comprar/Dar Lance/Trocar) -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h4 class="card-title fw-bold mb-3">Detalhes da Negociação</h4>
+
+                <!-- Caso: VENDA DIRETA -->
+                {% if announcement.listing_type == 'SALE' %}
+                    <div class="p-3 bg-light rounded mb-3">
+                        <small class="text-muted d-block">Preço:</small>
+                        <h2 class="text-success fw-bold m-0">R$ {{ announcement.price }}</h2>
+                    </div>
+                    
+                    {% if user.is_authenticated and user != announcement.seller %}
+                        <!-- Botão de Checkout PIX -->
+                        <a href="{% url 'marketplace:checkout_pix' pk=announcement.pk %}" class="btn btn-success btn-lg w-100 fw-bold">
+                            <i class="fa-solid fa-qrcode me-2"></i> Comprar com PIX
+                        </a>
+                    {% endif %}
+
+                <!-- Caso: LEILÃO -->
+                {% elif announcement.listing_type == 'AUCTION' %}
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Lance Inicial:</small>
+                        <span class="fw-bold fs-5">R$ {{ announcement.starting_bid }}</span>
+                    </div>
+                    <div class="alert alert-danger py-2 mb-3">
+                        <small><i class="fa-solid fa-clock me-1"></i>Encerra em: <strong>{{ announcement.auction_end|date:"d/m/Y H:i" }}</strong></small>
+                    </div>
+
+                    <div class="border-top pt-3 mb-3">
+                        <h6 class="fw-bold"><i class="fa-solid fa-trophy text-warning me-1"></i> Maior Lance Atual:</h6>
+                        <div id="bid-container">
+                            {% if announcement.bids.first %}
+                                <div class="fs-3 fw-bold text-danger" id="highest-bid-amount">R$ {{ announcement.bids.first.amount }}</div>
+                                <small class="text-muted" id="highest-bidder-info">
+                                    Por <strong id="highest-bidder">{{ announcement.bids.first.bidder.username }}</strong> em {{ announcement.bids.first.timestamp|date:"d/m H:i" }}
+                                </small>
+                            {% else %}
+                                <div class="fs-3 fw-bold text-danger" id="highest-bid-amount">R$ {{ announcement.starting_bid }}</div>
+                                <small class="text-muted" id="highest-bidder-info">Nenhum lance efetuado ainda. Seja o primeiro!</small>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if announcement.is_auction_active and user.is_authenticated and user != announcement.seller %}
+                        <form id="bid-form" action="{% url 'marketplace:place_bid' pk=announcement.pk %}" method="post">
+                            {% csrf_token %}
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Seu Lance (R$)</label>
+                                <input type="number" step="0.01" name="amount" id="bid-amount-input" class="form-control" placeholder="Valor maior que o lance atual" required>
+                            </div>
+                            <button type="submit" class="btn btn-danger w-100 fw-bold">
+                                <i class="fa-solid fa-gavel me-1"></i> Confirmar Lance
+                            </button>
+                        </form>
+                    {% endif %}
+
+                <!-- Caso: TROCA -->
+                {% elif announcement.listing_type == 'EXCHANGE' %}
+                    <div class="alert alert-warning mb-3">
+                        <strong class="d-block mb-1"><i class="fa-solid fa-right-left me-1"></i> Deseja em Troca:</strong>
+                        {{ announcement.desired_item_desc }}
+                    </div>
+                    {% if user.is_authenticated and user != announcement.seller %}
+                        <button class="btn btn-warning w-100 fw-bold text-dark">
+                            <i class="fa-solid fa-comments me-1"></i> Propor Troca
+                        </button>
+                    {% endif %}
+                {% endif %}
+
+                {% if not user.is_authenticated %}
+                    <a href="{% url 'usuarios:login' %}" class="btn btn-outline-secondary w-100 mt-2">
+                        Faça Login para negociar
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+{% if announcement.listing_type == 'AUCTION' %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const auctionId = "{{ announcement.pk }}";
+        const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+        const socketUrl = `${wsProtocol}://${window.location.host}/ws/leilao/${auctionId}/`;
+
+        let auctionSocket = null;
+
+        try {
+            auctionSocket = new WebSocket(socketUrl);
+
+            auctionSocket.onmessage = function (e) {
+                const data = JSON.parse(e.data);
+                
+                // Atualiza o valor e o nome do maior comprador em tempo real na tela
+                const amountElem = document.getElementById('highest-bid-amount');
+                const infoElem = document.getElementById('highest-bidder-info');
+
+                if (amountElem) {
+                    amountElem.innerText = `R$ ${parseFloat(data.amount).toFixed(2)}`;
+                }
+                if (infoElem) {
+                    infoElem.innerHTML = `Por <strong>${data.bidder}</strong> agora mesmo!`;
+                }
+            };
+
+            auctionSocket.onerror = function (err) {
+                console.log("WebSocket sem conexão ativa (usando fallback HTTP normal).");
+            };
+        } catch (e) {
+            console.log("WebSocket não configurado no servidor.");
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}

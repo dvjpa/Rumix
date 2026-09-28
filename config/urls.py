@@ -8,7 +8,8 @@ urlpatterns = [
     path('fazendas/', include(('fazendas.urls', 'fazendas'), namespace='fazendas')),
     path('usuarios/', include(('usuarios.urls', 'usuarios'), namespace='usuarios')),
     path('eventos/', include(('eventos.urls', 'eventos'), namespace='eventos')),
-    path('', include(('rumix.urls', 'rumix'), namespace='rumix')),
+    path('marketplace/', include(('marketplace.urls', 'marketplace'), namespace='marketplace')), # 🛒 Atualizado com namespace
+    path('', include(('rumix.urls', 'rumix'), namespace='rumix')), # Mantido no final para capturar a rota raiz
     path('admin/', admin.site.urls),
 ]
 

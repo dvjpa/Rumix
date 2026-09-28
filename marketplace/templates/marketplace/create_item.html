@@ -1,0 +1,47 @@
+{% extends 'rumix/base.html' %}
+
+{% block title %}Cadastrar Item - Rumix{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{% url 'marketplace:item_list' %}" class="btn btn-link text-success p-0 text-decoration-none">
+        <i class="fa-solid fa-arrow-left me-1"></i> Voltar para Meus Itens
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-success text-white py-3">
+                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-box-open me-2"></i>Cadastrar Novo Item</h5>
+            </div>
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Título / Nome do Item</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}
+                            <div class="text-danger small mt-1">{{ form.title.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Descrição do Item</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                            <div class="text-danger small mt-1">{{ form.description.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="submit" class="btn btn-success btn-lg fw-bold">Salvar Item</button>
+                        <a href="{% url 'marketplace:item_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

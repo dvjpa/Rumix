@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Segurança
 SECRET_KEY = os.environ.get('SECRET_KEY', 'chave-padrao-desenvolvimento')
-DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+DEBUG = os.environ.get('DEBUG', 'True')
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']  # ajuste em produção
 
 # Banco de dados PostgreSQL
@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'crispy_bootstrap5',
     'usuarios',
     'eventos',
+    'marketplace',
 ]
 
 MIDDLEWARE = [

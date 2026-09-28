@@ -26,10 +26,36 @@
       </button>
       <div class="collapse navbar-collapse justify-content-end" id="navegacao">
         <ul class="navbar-nav align-items-center">
-          <li class="nav-item"><a class="nav-link" href="{% url 'rumix:index' %}"><i class="fa-solid fa-house me-1"></i>Início</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'animais:lista' %}"><i class="fa-solid fa-cow me-1"></i>Animais</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'fazendas:lista' %}"><i class="fa-solid fa-tractor me-1"></i>Fazendas</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'rumix:sobre' %}"><i class="fa-solid fa-handshake me-1"></i>Sobre</a></li>
+          <li class="nav-item">
+            <a class="nav-link {% if request.resolver_match.namespace == 'rumix' and request.resolver_match.url_name == 'index' %}active{% endif %}" href="{% url 'rumix:index' %}">
+              <i class="fa-solid fa-house me-1"></i>Início
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if request.resolver_match.namespace == 'animais' %}active{% endif %}" href="{% url 'animais:lista' %}">
+              <i class="fa-solid fa-cow me-1"></i>Animais
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if request.resolver_match.namespace == 'fazendas' %}active{% endif %}" href="{% url 'fazendas:lista' %}">
+              <i class="fa-solid fa-tractor me-1"></i>Fazendas
+            </a>
+          </li>
+          
+          <!-- 🛒 Item adicionado: Comércio (Vendas, Trocas e Leilões) -->
+          <li class="nav-item">
+            <a class="nav-link {% if request.resolver_match.namespace == 'marketplace' %}active{% endif %}" href="{% url 'marketplace:home' %}">
+              <i class="fa-solid fa-store me-1"></i>Comércio
+            </a>
+          </li>
+
+          <li class="nav-item">
+            <a class="nav-link {% if request.resolver_match.namespace == 'rumix' and request.resolver_match.url_name == 'sobre' %}active{% endif %}" href="{% url 'rumix:sobre' %}">
+              <i class="fa-solid fa-handshake me-1"></i>Sobre
+            </a>
+          </li>
+
+          <!-- Menu de Usuário -->
           <li class="nav-item dropdown ms-3">
             <a class="nav-link dropdown-toggle" href="#" id="userMenu" data-bs-toggle="dropdown">
               <i class="fa-solid fa-user"></i>
@@ -37,12 +63,16 @@
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenu">
               {% if user.is_authenticated %}
                 <li><a class="dropdown-item" href="{% url 'rumix:perfil' %}">Perfil</a></li>
+                <!-- Atalho rápido para criar anúncio quando autenticado -->
+                <li><a class="dropdown-item text-success" href="{% url 'marketplace:create' %}"><i class="fa-solid fa-plus me-1"></i>Novo Anúncio</a></li>
+                <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="{% url 'rumix:logout' %}">Sair</a></li>
               {% else %}
                 <li><a class="dropdown-item" href="{% url 'usuarios:login' %}">Entrar</a></li>
                 <li><a class="dropdown-item" href="{% url 'usuarios:register' %}">Criar Conta</a></li>
               {% endif %}
               {% if user.is_authenticated and user.is_superuser %}
+                <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="{% url 'usuarios:usuarios' %}">Gerenciar Usuários</a></li>
               {% endif %}
             </ul>
@@ -52,16 +82,18 @@
     </div>
   </nav>
 </header>
-  {% if messages %}
-    <div class="position-fixed top-0 end-0 p-3" style="z-index: 1080; width: 360px;">
-      {% for message in messages %}
-        <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm mb-2" role="alert">
-          {{ message }}
-          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-      {% endfor %}
-    </div>
-  {% endif %}
+
+{% if messages %}
+  <div class="position-fixed top-0 end-0 p-3" style="z-index: 1080; width: 360px;">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm mb-2" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
 <main class="flex-fill py-5 bg-light">
   <div class="container">
     {% block content %}{% endblock %}

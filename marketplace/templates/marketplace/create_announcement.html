@@ -1,0 +1,118 @@
+{% extends 'rumix/base.html' %}
+
+{% block title %}Criar Anúncio - Rumix{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-7">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-success text-white py-3">
+                <h4 class="mb-0 fw-bold"><i class="fa-solid fa-plus-circle me-2"></i>Cadastrar Anúncio de Comércio</h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" id="announcement-form">
+                    {% csrf_token %}
+
+                    <!-- Exibe erros gerais do formulário (ex: validações do clean()) -->
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger mb-3">
+                            {% for error in form.non_field_errors %}
+                                <p class="mb-0"><i class="fa-solid fa-triangle-exclamation me-1"></i>{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <!-- Campo Item -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-bold mb-0">Selecione o Item</label>
+                            <a href="{% url 'marketplace:create_item' %}?next={% url 'marketplace:create' %}" class="small text-success text-decoration-none">
+                                <i class="fa-solid fa-plus-circle me-1"></i>Novo Item
+                            </a>
+                        </div>
+                        {{ form.item }}
+                        {% if form.item.errors %}
+                            <div class="text-danger small mt-1">{{ form.item.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Tipo de Anúncio -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Modalidade do Anúncio</label>
+                        {{ form.listing_type }}
+                        {% if form.listing_type.errors %}
+                            <div class="text-danger small mt-1">{{ form.listing_type.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Bloco Venda -->
+                    <div class="mb-3 p-3 bg-light rounded border" id="group-price">
+                        <label class="form-label fw-bold text-success"><i class="fa-solid fa-tag me-1"></i>Preço de Venda (R$)</label>
+                        {{ form.price }}
+                        {% if form.price.errors %}
+                            <div class="text-danger small mt-1">{{ form.price.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Bloco Leilão -->
+                    <div class="p-3 bg-light rounded border mb-3" id="group-auction">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-danger"><i class="fa-solid fa-gavel me-1"></i>Lance Inicial (R$)</label>
+                            {{ form.starting_bid }}
+                            {% if form.starting_bid.errors %}
+                                <div class="text-danger small mt-1">{{ form.starting_bid.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label fw-bold text-danger"><i class="fa-solid fa-calendar me-1"></i>Término do Leilão</label>
+                            {{ form.auction_end }}
+                            {% if form.auction_end.errors %}
+                                <div class="text-danger small mt-1">{{ form.auction_end.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Bloco Troca -->
+                    <div class="mb-3 p-3 bg-light rounded border" id="group-exchange">
+                        <label class="form-label fw-bold text-dark"><i class="fa-solid fa-right-left me-1"></i>O que deseja em troca?</label>
+                        {{ form.desired_item_desc }}
+                        {% if form.desired_item_desc.errors %}
+                            <div class="text-danger small mt-1">{{ form.desired_item_desc.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="submit" class="btn btn-success btn-lg fw-bold">Publicar Anúncio</button>
+                        <a href="{% url 'marketplace:home' %}" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const typeSelect = document.getElementById('id_listing_type');
+        const priceGroup = document.getElementById('group-price');
+        const auctionGroup = document.getElementById('group-auction');
+        const exchangeGroup = document.getElementById('group-exchange');
+
+        function updateFields() {
+            if (!typeSelect) return;
+            const value = typeSelect.value;
+            
+            priceGroup.style.display = (value === 'SALE') ? 'block' : 'none';
+            auctionGroup.style.display = (value === 'AUCTION') ? 'block' : 'none';
+            exchangeGroup.style.display = (value === 'EXCHANGE') ? 'block' : 'none';
+        }
+
+        if (typeSelect) {
+            typeSelect.addEventListener('change', updateFields);
+            updateFields();
+        }
+    });
+</script>
+{% endblock %}
