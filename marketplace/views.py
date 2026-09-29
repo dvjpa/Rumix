@@ -5,13 +5,14 @@ import mercadopago
 import json
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from decimal import Decimal
 
 # Importações dos Modelos (Incluindo Item e Order)
 from .models import Item, Announcement, ListingType, Bid, Order
 from .forms import AnnouncementForm, ItemForm
 
 # Defina sua chave/token do Mercado Pago (ou use através do settings.MERCADO_PAGO_TOKEN)
-MERCADO_PAGO_TOKEN = "TEST-SEU_ACCESS_TOKEN_AQUI"
+MERCADO_PAGO_TOKEN = ""
 
 
 def marketplace_home(request):
@@ -196,3 +197,108 @@ def mercadopago_webhook(request):
                 return JsonResponse({'status': 'order_updated_to_paid'}, status=200)
 
     return HttpResponse(status=200)
+
+@login_required
+def place_bid(request, pk):
+    announcement = get_object_or_404(Announcement, pk=pk)
+
+    # Verifica se o leilão está ativo
+    if not announcement.is_auction_active():
+        messages.error(request, "Este leilão já foi encerrado ou não está ativo.")
+        return redirect('marketplace:detail', pk=pk)
+
+    # Impede que o próprio vendedor dê lances
+    if announcement.seller == request.user:
+        messages.error(request, "Você não pode dar lances no seu próprio leilão.")
+        return redirect('marketplace:detail', pk=pk)
+
+    if request.method == 'POST':
+        try:
+            amount = Decimal(request.POST.get('amount', '0'))
+        except (ValueError, TypeError):
+            messages.error(request, "Valor de lance inválido.")
+            return redirect('marketplace:detail', pk=pk)
+
+        highest = announcement.highest_bid
+        min_required = highest.amount if highest else (announcement.starting_bid or Decimal('0'))
+
+        if amount <= min_required:
+            messages.error(request, f"O seu lance deve ser maior do que R$ {min_required}.")
+            return redirect('marketplace:detail', pk=pk)
+
+        # Salva o lance
+        Bid.objects.create(
+            announcement=announcement,
+            bidder=request.user,
+            amount=amount
+        )
+        messages.success(request, f"Lance de R$ {amount} efetuado com sucesso!")
+
+    return redirect('marketplace:detail', pk=pk)
+
+
+@login_required
+def pay_auction_winner(request, pk):
+    announcement = get_object_or_404(Announcement, pk=pk, listing_type=ListingType.AUCTION)
+
+    highest_bid = announcement.highest_bid
+
+    # Validações: O leilão precisa estar finalizado e o utilizador precisa ser o maior lançador
+    if announcement.is_auction_active():
+        messages.error(request, "O leilão ainda está em andamento.")
+        return redirect('marketplace:detail', pk=pk)
+
+    if not highest_bid or highest_bid.bidder != request.user:
+        messages.error(request, "Apenas o vencedor do leilão pode realizar o pagamento.")
+        return redirect('marketplace:detail', pk=pk)
+
+    # Marca o anúncio como concluído após a ida para checkout
+    if announcement.status == ListingStatus.ACTIVE:
+        announcement.status = ListingStatus.COMPLETED
+        announcement.save()
+
+    # Integração com Mercado Pago
+    sdk = mercadopago.SDK(MERCADO_PAGO_TOKEN)
+
+    payment_data = {
+        "transaction_amount": float(highest_bid.amount),
+        "description": f"Leilão Vencido: {announcement.item.title}",
+        "payment_method_id": "pix",
+        "payer": {
+            "email": request.user.email or "comprador@rumix.com",
+            "first_name": request.user.first_name or request.user.username,
+        }
+    }
+
+    payment_response = sdk.payment().create(payment_data)
+    payment = payment_response.get("response", {})
+
+    qr_code_base64 = payment.get("point_of_interaction", {}).get("transaction_data", {}).get("qr_code_base64")
+    qr_code_copy_paste = payment.get("point_of_interaction", {}).get("transaction_data", {}).get("qr_code")
+    gateway_id = str(payment.get("id", ""))
+
+    # Cria ou atualiza a Order no banco de dados
+    order, created = Order.objects.get_or_create(
+        announcement=announcement,
+        buyer=request.user,
+        defaults={
+            'seller': announcement.seller,
+            'amount': highest_bid.amount,
+            'pix_qr_code_base64': qr_code_base64,
+            'pix_copy_paste': qr_code_copy_paste,
+            'gateway_id': gateway_id,
+            'status': 'PENDING'
+        }
+    )
+
+    if not created:
+        order.amount = highest_bid.amount
+        order.pix_qr_code_base64 = qr_code_base64
+        order.pix_copy_paste = qr_code_copy_paste
+        order.gateway_id = gateway_id
+        order.save()
+
+    return render(request, 'marketplace/payment_pix.html', {
+        'announcement': announcement,
+        'order': order
+    })

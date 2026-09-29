@@ -45,6 +45,11 @@ class Announcement(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # 👈 Mova a propriedade para cá (Anúncio tem lances através da relação 'bids')
+    @property
+    def highest_bid(self):
+        return self.bids.order_by('-amount').first()
+
     def is_auction_active(self):
         if self.listing_type == ListingType.AUCTION and self.auction_end:
             return self.status == ListingStatus.ACTIVE and timezone.now() < self.auction_end
@@ -74,6 +79,7 @@ class TradeProposal(models.Model):
     is_accepted = models.BooleanField('Aceita', null=True, default=None)
     timestamp = models.DateTimeField(auto_now_add=True)
 
+
 class Order(models.Model):
     STATUS_CHOICES = (
         ('PENDING', 'Aguardando Pagamento'),
@@ -83,7 +89,6 @@ class Order(models.Model):
     
     announcement = models.ForeignKey('Announcement', on_delete=models.CASCADE, related_name='orders')
     
-    # 👈 2. Use settings.AUTH_USER_MODEL diretamente no ForeignKey:
     buyer = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.CASCADE, 

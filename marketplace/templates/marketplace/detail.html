@@ -46,11 +46,22 @@
                         <small class="text-muted d-block">Preço:</small>
                         <h2 class="text-success fw-bold m-0">R$ {{ announcement.price }}</h2>
                     </div>
-                    
-                    {% if user.is_authenticated and user != announcement.seller %}
-                        <!-- Botão de Checkout PIX -->
-                        <a href="{% url 'marketplace:checkout_pix' pk=announcement.pk %}" class="btn btn-success btn-lg w-100 fw-bold">
-                            <i class="fa-solid fa-qrcode me-2"></i> Comprar com PIX
+
+                    {% if user.is_authenticated %}
+                        {% if user != announcement.seller %}
+                            <!-- Botão de Checkout PIX para Compradores -->
+                            <a href="{% url 'marketplace:checkout_pix' pk=announcement.pk %}" class="btn btn-success btn-lg w-100 fw-bold">
+                                <i class="fa-solid fa-qrcode me-2"></i> Comprar com PIX
+                            </a>
+                        {% else %}
+                            <!-- Mensagem de aviso se o utilizador for o dono do anúncio -->
+                            <div class="alert alert-warning small mb-0 text-center">
+                                <i class="fa-solid fa-user-check me-1"></i> Você é o vendedor deste item.
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <a href="{% url 'usuarios:login' %}" class="btn btn-outline-secondary w-100 fw-bold">
+                            Faça Login para Comprar
                         </a>
                     {% endif %}
 
@@ -60,36 +71,75 @@
                         <small class="text-muted d-block">Lance Inicial:</small>
                         <span class="fw-bold fs-5">R$ {{ announcement.starting_bid }}</span>
                     </div>
-                    <div class="alert alert-danger py-2 mb-3">
-                        <small><i class="fa-solid fa-clock me-1"></i>Encerra em: <strong>{{ announcement.auction_end|date:"d/m/Y H:i" }}</strong></small>
-                    </div>
+
+                    {% if announcement.is_auction_active %}
+                        <div class="alert alert-danger py-2 mb-3">
+                            <small><i class="fa-solid fa-clock me-1"></i>Encerra em: <strong>{{ announcement.auction_end|date:"d/m/Y H:i" }}</strong></small>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-secondary py-2 mb-3 fw-bold text-center">
+                            <i class="fa-solid fa-lock me-1"></i> Leilão Encerrado
+                        </div>
+                    {% endif %}
 
                     <div class="border-top pt-3 mb-3">
                         <h6 class="fw-bold"><i class="fa-solid fa-trophy text-warning me-1"></i> Maior Lance Atual:</h6>
                         <div id="bid-container">
-                            {% if announcement.bids.first %}
-                                <div class="fs-3 fw-bold text-danger" id="highest-bid-amount">R$ {{ announcement.bids.first.amount }}</div>
+                            {% if announcement.highest_bid %}
+                                <div class="fs-3 fw-bold text-danger" id="highest-bid-amount">R$ {{ announcement.highest_bid.amount }}</div>
                                 <small class="text-muted" id="highest-bidder-info">
-                                    Por <strong id="highest-bidder">{{ announcement.bids.first.bidder.username }}</strong> em {{ announcement.bids.first.timestamp|date:"d/m H:i" }}
+                                    Por <strong id="highest-bidder">{{ announcement.highest_bid.bidder.username }}</strong>
                                 </small>
                             {% else %}
                                 <div class="fs-3 fw-bold text-danger" id="highest-bid-amount">R$ {{ announcement.starting_bid }}</div>
-                                <small class="text-muted" id="highest-bidder-info">Nenhum lance efetuado ainda. Seja o primeiro!</small>
+                                <small class="text-muted" id="highest-bidder-info">Nenhum lance efetuado ainda.</small>
                             {% endif %}
                         </div>
                     </div>
 
-                    {% if announcement.is_auction_active and user.is_authenticated and user != announcement.seller %}
-                        <form id="bid-form" action="{% url 'marketplace:place_bid' pk=announcement.pk %}" method="post">
-                            {% csrf_token %}
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold">Seu Lance (R$)</label>
-                                <input type="number" step="0.01" name="amount" id="bid-amount-input" class="form-control" placeholder="Valor maior que o lance atual" required>
+                    <!-- LEILÃO ATIVO: FORMULÁRIO DE LANCE -->
+                    {% if announcement.is_auction_active %}
+                        {% if user.is_authenticated %}
+                            {% if user != announcement.seller %}
+                                <form id="bid-form" action="{% url 'marketplace:place_bid' pk=announcement.pk %}" method="post">
+                                    {% csrf_token %}
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold">Seu Lance (R$)</label>
+                                        <input type="number" step="0.01" name="amount" id="bid-amount-input" class="form-control" placeholder="Valor maior que o lance atual" required>
+                                    </div>
+                                    <button type="submit" class="btn btn-danger w-100 fw-bold">
+                                        <i class="fa-solid fa-gavel me-1"></i> Confirmar Lance
+                                    </button>
+                                </form>
+                            {% else %}
+                                <div class="alert alert-warning small mb-0 text-center">
+                                    <i class="fa-solid fa-user-check me-1"></i> Você é o dono deste leilão.
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <a href="{% url 'usuarios:login' %}" class="btn btn-outline-secondary w-100 fw-bold">
+                                Faça Login para Dar Lance
+                            </a>
+                        {% endif %}
+
+                    <!-- LEILÃO FINALIZADO: PAGAMENTO PARA O VENCEDOR -->
+                    {% else %}
+                        {% if user.is_authenticated and announcement.highest_bid and user == announcement.highest_bid.bidder %}
+                            <div class="alert alert-success small mb-3 text-center">
+                                🎉 <strong>Parabéns!</strong> Você venceu este leilão.
                             </div>
-                            <button type="submit" class="btn btn-danger w-100 fw-bold">
-                                <i class="fa-solid fa-gavel me-1"></i> Confirmar Lance
-                            </button>
-                        </form>
+                            <a href="{% url 'marketplace:pay_auction' pk=announcement.pk %}" class="btn btn-success btn-lg w-100 fw-bold">
+                                <i class="fa-solid fa-qrcode me-2"></i> Pagar Lance Vencedor via PIX
+                            </a>
+                        {% elif announcement.highest_bid %}
+                            <div class="alert alert-info small mb-0 text-center">
+                                Este leilão foi arrematado por <strong>{{ announcement.highest_bid.bidder.username }}</strong>.
+                            </div>
+                        {% else %}
+                            <div class="alert alert-light small mb-0 text-center">
+                                O leilão encerrou sem nenhum lance.
+                            </div>
+                        {% endif %}
                     {% endif %}
 
                 <!-- Caso: TROCA -->
@@ -105,11 +155,6 @@
                     {% endif %}
                 {% endif %}
 
-                {% if not user.is_authenticated %}
-                    <a href="{% url 'usuarios:login' %}" class="btn btn-outline-secondary w-100 mt-2">
-                        Faça Login para negociar
-                    </a>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -132,7 +177,6 @@
             auctionSocket.onmessage = function (e) {
                 const data = JSON.parse(e.data);
                 
-                // Atualiza o valor e o nome do maior comprador em tempo real na tela
                 const amountElem = document.getElementById('highest-bid-amount');
                 const infoElem = document.getElementById('highest-bidder-info');
 
