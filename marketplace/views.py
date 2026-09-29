@@ -1,40 +1,73 @@
+import json
+from decimal import Decimal
+import mercadopago
+
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-import mercadopago
-import json
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from decimal import Decimal
+from django.db.models import Q
 
-# Importações dos Modelos (Incluindo Item e Order)
-from .models import Item, Announcement, ListingType, Bid, Order
+# Importação dos Modelos e Formulários
+from .models import Item, Announcement, ListingType, ListingStatus, Bid, Order
 from .forms import AnnouncementForm, ItemForm
 
-# Defina sua chave/token do Mercado Pago (ou use através do settings.MERCADO_PAGO_TOKEN)
-MERCADO_PAGO_TOKEN = ""
+# Token do Mercado Pago
+MERCADO_PAGO_TOKEN = "SEU_TOKEN_DO_MERCADO_PAGO_AQUI"
 
 
 def marketplace_home(request):
-    filter_type = request.GET.get('type')
-    announcements = Announcement.objects.filter(status='ACTIVE')
-    
-    if filter_type in [ListingType.SALE, ListingType.EXCHANGE, ListingType.AUCTION]:
-        announcements = announcements.filter(listing_type=filter_type)
+    """
+    Página Principal do Comércio.
+    Suporta navegação por abas (?tipo=SALE | AUCTION | EXCHANGE | ALL ou ?type=...)
+    e busca simples por palavra-chave (?q=termo).
+    """
+    # Captura o parâmetro das abas (suporta tanto 'tipo' quanto 'type')
+    tipo_filtro = request.GET.get('tipo') or request.GET.get('type') or 'ALL'
+    busca = request.GET.get('q', '').strip()
+
+    announcements = Announcement.objects.filter(status=ListingStatus.ACTIVE)
+
+    # Filtragem das 4 categorias principais
+    if tipo_filtro == 'PRODUCT':
+        # Filtra anúncios de venda que pertencem a produtos/insumos
+        announcements = announcements.filter(
+            listing_type=ListingType.SALE
+        ).exclude(item__title__icontains='cabeça').exclude(item__title__icontains='gado')
+    elif tipo_filtro == 'SALE' or tipo_filtro == ListingType.SALE:
+        # Filtra vendas gerais ou animais
+        announcements = announcements.filter(listing_type=ListingType.SALE)
+    elif tipo_filtro == 'AUCTION' or tipo_filtro == ListingType.AUCTION:
+        announcements = announcements.filter(listing_type=ListingType.AUCTION)
+    elif tipo_filtro == 'EXCHANGE' or tipo_filtro == ListingType.EXCHANGE:
+        announcements = announcements.filter(listing_type=ListingType.EXCHANGE)
+
+    # Filtro por barra de pesquisa
+    if busca:
+        announcements = announcements.filter(
+            Q(item__title__icontains=busca) | Q(item__description__icontains=busca)
+        )
+
+    announcements = announcements.order_by('-created_at')
 
     return render(request, 'marketplace/home.html', {
         'announcements': announcements,
-        'filter_type': filter_type,
+        'tipo_filtro': tipo_filtro,
+        'filter_type': tipo_filtro,
+        'busca': busca,
     })
 
-
 def announcement_detail(request, pk):
+    """Exibe os detalhes de um anúncio específico."""
     announcement = get_object_or_404(Announcement, pk=pk)
     return render(request, 'marketplace/detail.html', {'announcement': announcement})
 
 
 @login_required
 def create_announcement(request):
+    """Criação de um novo anúncio."""
     if request.method == 'POST':
         form = AnnouncementForm(request.POST, user=request.user)
         if form.is_valid():
@@ -47,32 +80,6 @@ def create_announcement(request):
         form = AnnouncementForm(user=request.user)
 
     return render(request, 'marketplace/create_announcement.html', {'form': form})
-
-
-@login_required
-def place_bid(request, pk):
-    announcement = get_object_or_404(Announcement, pk=pk, listing_type=ListingType.AUCTION)
-    
-    if hasattr(announcement, 'is_auction_active') and not announcement.is_auction_active():
-        messages.error(request, 'Este leilão já foi encerrado.')
-        return redirect('marketplace:detail', pk=pk)
-
-    if request.method == 'POST':
-        try:
-            amount = float(request.POST.get('amount', 0))
-        except (ValueError, TypeError):
-            amount = 0.0
-
-        highest_bid = announcement.bids.order_by('-amount').first()
-        min_amount = float(highest_bid.amount) if highest_bid else float(announcement.starting_bid or 0)
-
-        if amount > min_amount:
-            Bid.objects.create(announcement=announcement, bidder=request.user, amount=amount)
-            messages.success(request, 'Lance realizado com sucesso!')
-        else:
-            messages.error(request, f'O lance deve ser maior do que R$ {min_amount:.2f}')
-
-    return redirect('marketplace:detail', pk=pk)
 
 
 @login_required
@@ -102,10 +109,51 @@ def create_item(request):
 
     return render(request, 'marketplace/create_item.html', {'form': form})
 
+
+@login_required
+def place_bid(request, pk):
+    """Permite que compradores façam lances em leilões ativos."""
+    announcement = get_object_or_404(Announcement, pk=pk, listing_type=ListingType.AUCTION)
+
+    # Verifica se o leilão está ativo
+    if hasattr(announcement, 'is_auction_active') and not announcement.is_auction_active():
+        messages.error(request, "Este leilão já foi encerrado ou não está ativo.")
+        return redirect('marketplace:detail', pk=pk)
+
+    # Impede que o próprio vendedor dê lances
+    if announcement.seller == request.user:
+        messages.error(request, "Você não pode dar lances no seu próprio leilão.")
+        return redirect('marketplace:detail', pk=pk)
+
+    if request.method == 'POST':
+        try:
+            amount = Decimal(request.POST.get('amount', '0'))
+        except (ValueError, TypeError):
+            messages.error(request, "Valor de lance inválido.")
+            return redirect('marketplace:detail', pk=pk)
+
+        highest = announcement.highest_bid
+        min_required = highest.amount if highest else (announcement.starting_bid or Decimal('0'))
+
+        if amount <= min_required:
+            messages.error(request, f"O seu lance deve ser maior do que R$ {min_required:.2f}.")
+            return redirect('marketplace:detail', pk=pk)
+
+        # Salva o lance efetuado
+        Bid.objects.create(
+            announcement=announcement,
+            bidder=request.user,
+            amount=amount
+        )
+        messages.success(request, f"Lance de R$ {amount:.2f} efetuado com sucesso!")
+
+    return redirect('marketplace:detail', pk=pk)
+
+
 @login_required
 def checkout_pix(request, pk):
-    """Gera cobrança PIX para venda direta e salva no modelo Order."""
-    announcement = get_object_or_404(Announcement, pk=pk, status='ACTIVE')
+    """Gera a cobrança PIX via Mercado Pago para compras de Venda Direta."""
+    announcement = get_object_or_404(Announcement, pk=pk, status=ListingStatus.ACTIVE)
 
     if announcement.seller == request.user:
         messages.error(request, "Você não pode comprar seu próprio item.")
@@ -115,8 +163,10 @@ def checkout_pix(request, pk):
         announcement=announcement,
         buyer=request.user,
         seller=announcement.seller,
-        status='PENDING',
-        defaults={'amount': announcement.price or 0.0}
+        defaults={
+            'amount': announcement.price or Decimal('0.0'),
+            'status': 'PENDING'
+        }
     )
 
     if not order.pix_copy_paste:
@@ -153,98 +203,16 @@ def checkout_pix(request, pk):
         'announcement': announcement
     })
 
-@csrf_exempt
-@require_POST
-def mercadopago_webhook(request):
-    """Webhook do Mercado Pago para atualização automática do status do pagamento."""
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return HttpResponse(status=400)
-
-    # O Mercado Pago envia 'type' ou 'action' indicando o evento de 'payment'
-    action_type = data.get('type') or data.get('action')
-    payment_id = None
-
-    if action_type in ['payment', 'payment.updated', 'payment.created']:
-        # O ID do pagamento pode vir em 'data.id'
-        payment_data = data.get('data', {})
-        payment_id = payment_data.get('id')
-    elif 'id' in data and data.get('entity') == 'payment':
-        payment_id = data.get('id')
-
-    if payment_id:
-        sdk = mercadopago.SDK(MERCADO_PAGO_TOKEN)
-        payment_info = sdk.payment().get(str(payment_id))
-        payment_response = payment_info.get("response", {})
-
-        status = payment_response.get("status")
-
-        if status == "approved":
-            # Busca o pedido registrado com o gateway_id
-            order = Order.objects.filter(gateway_id=str(payment_id)).first()
-
-            if order and order.status != 'PAID':
-                # Atualiza o status do Pedido para Pago
-                order.status = 'PAID'
-                order.save()
-
-                # Marca o anúncio como vendido/concluído
-                announcement = order.announcement
-                announcement.status = 'COMPLETED'
-                announcement.save()
-
-                return JsonResponse({'status': 'order_updated_to_paid'}, status=200)
-
-    return HttpResponse(status=200)
-
-@login_required
-def place_bid(request, pk):
-    announcement = get_object_or_404(Announcement, pk=pk)
-
-    # Verifica se o leilão está ativo
-    if not announcement.is_auction_active():
-        messages.error(request, "Este leilão já foi encerrado ou não está ativo.")
-        return redirect('marketplace:detail', pk=pk)
-
-    # Impede que o próprio vendedor dê lances
-    if announcement.seller == request.user:
-        messages.error(request, "Você não pode dar lances no seu próprio leilão.")
-        return redirect('marketplace:detail', pk=pk)
-
-    if request.method == 'POST':
-        try:
-            amount = Decimal(request.POST.get('amount', '0'))
-        except (ValueError, TypeError):
-            messages.error(request, "Valor de lance inválido.")
-            return redirect('marketplace:detail', pk=pk)
-
-        highest = announcement.highest_bid
-        min_required = highest.amount if highest else (announcement.starting_bid or Decimal('0'))
-
-        if amount <= min_required:
-            messages.error(request, f"O seu lance deve ser maior do que R$ {min_required}.")
-            return redirect('marketplace:detail', pk=pk)
-
-        # Salva o lance
-        Bid.objects.create(
-            announcement=announcement,
-            bidder=request.user,
-            amount=amount
-        )
-        messages.success(request, f"Lance de R$ {amount} efetuado com sucesso!")
-
-    return redirect('marketplace:detail', pk=pk)
-
 
 @login_required
 def pay_auction_winner(request, pk):
+    """Gera cobrança PIX para o vencedor de um leilão encerrado."""
     announcement = get_object_or_404(Announcement, pk=pk, listing_type=ListingType.AUCTION)
 
     highest_bid = announcement.highest_bid
 
-    # Validações: O leilão precisa estar finalizado e o utilizador precisa ser o maior lançador
-    if announcement.is_auction_active():
+    # Validações: O leilão precisa estar encerrado e o usuário precisa ser o maior lançador
+    if hasattr(announcement, 'is_auction_active') and announcement.is_auction_active():
         messages.error(request, "O leilão ainda está em andamento.")
         return redirect('marketplace:detail', pk=pk)
 
@@ -252,12 +220,11 @@ def pay_auction_winner(request, pk):
         messages.error(request, "Apenas o vencedor do leilão pode realizar o pagamento.")
         return redirect('marketplace:detail', pk=pk)
 
-    # Marca o anúncio como concluído após a ida para checkout
+    # Marca o anúncio como concluído ao iniciar o checkout
     if announcement.status == ListingStatus.ACTIVE:
         announcement.status = ListingStatus.COMPLETED
         announcement.save()
 
-    # Integração com Mercado Pago
     sdk = mercadopago.SDK(MERCADO_PAGO_TOKEN)
 
     payment_data = {
@@ -265,7 +232,7 @@ def pay_auction_winner(request, pk):
         "description": f"Leilão Vencido: {announcement.item.title}",
         "payment_method_id": "pix",
         "payer": {
-            "email": request.user.email or "comprador@rumix.com",
+            "email": request.user.email or f"{request.user.username}@rumix.com",
             "first_name": request.user.first_name or request.user.username,
         }
     }
@@ -277,7 +244,6 @@ def pay_auction_winner(request, pk):
     qr_code_copy_paste = payment.get("point_of_interaction", {}).get("transaction_data", {}).get("qr_code")
     gateway_id = str(payment.get("id", ""))
 
-    # Cria ou atualiza a Order no banco de dados
     order, created = Order.objects.get_or_create(
         announcement=announcement,
         buyer=request.user,
@@ -302,3 +268,45 @@ def pay_auction_winner(request, pk):
         'announcement': announcement,
         'order': order
     })
+
+
+@csrf_exempt
+@require_POST
+def mercadopago_webhook(request):
+    """Webhook do Mercado Pago para confirmação automática de pagamento."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return HttpResponse(status=400)
+
+    action_type = data.get('type') or data.get('action')
+    payment_id = None
+
+    if action_type in ['payment', 'payment.updated', 'payment.created']:
+        payment_data = data.get('data', {})
+        payment_id = payment_data.get('id')
+    elif 'id' in data and data.get('entity') == 'payment':
+        payment_id = data.get('id')
+
+    if payment_id:
+        sdk = mercadopago.SDK(MERCADO_PAGO_TOKEN)
+        payment_info = sdk.payment().get(str(payment_id))
+        payment_response = payment_info.get("response", {})
+
+        status = payment_response.get("status")
+
+        if status == "approved":
+            order = Order.objects.filter(gateway_id=str(payment_id)).first()
+
+            if order and order.status != 'PAID':
+                order.status = 'PAID'
+                order.save()
+
+                # Marca o anúncio como concluído
+                announcement = order.announcement
+                announcement.status = ListingStatus.COMPLETED
+                announcement.save()
+
+                return JsonResponse({'status': 'order_updated_to_paid'}, status=200)
+
+    return HttpResponse(status=200)

@@ -1,97 +1,150 @@
 {% extends 'rumix/base.html' %}
+{% load static %}
 
 {% block title %}Comércio - Rumix{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+<!-- Cabeçalho explicativo simples -->
+<div class="bg-white p-4 rounded-3 shadow-sm mb-4 border">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
     <div>
-        <h2 class="fw-bold mb-1"><i class="fa-solid fa-store me-2 text-success"></i>Área de Comércio</h2>
-        <p class="text-muted mb-0">Encontre oportunidades de compra, troca e leilões de animais e suprimentos.</p>
+      <h2 class="fw-bold text-success m-0"><i class="fa-solid fa-store me-2"></i>Comércio Rumix</h2>
+      <p class="text-muted m-0 fs-6 mt-1">Escolha abaixo o tipo de negócio que você procura:</p>
     </div>
     {% if user.is_authenticated %}
-        <a href="{% url 'marketplace:create' %}" class="btn btn-success shadow-sm">
-            <i class="fa-solid fa-plus me-1"></i> Criar Novo Anúncio
-        </a>
+      <a href="{% url 'marketplace:create' %}" class="btn btn-warning text-dark fw-bold btn-lg">
+        <i class="fa-solid fa-circle-plus me-1"></i> Anunciar Novo Item
+      </a>
     {% endif %}
+  </div>
 </div>
 
-<!-- Filtros de Navegação (Venda, Troca, Leilão) -->
-<div class="card shadow-sm mb-4">
-    <div class="card-body p-2">
-        <div class="nav nav-pills nav-fill">
-            <a href="{% url 'marketplace:home' %}" class="nav-link {% if not filter_type %}active bg-success{% endif %}">
-                <i class="fa-solid fa-layer-group me-1"></i> Todos
-            </a>
-            <a href="{% url 'marketplace:home' %}?type=SALE" class="nav-link {% if filter_type == 'SALE' %}active bg-success{% endif %}">
-                <i class="fa-solid fa-tag me-1"></i> Vendas
-            </a>
-            <a href="{% url 'marketplace:home' %}?type=EXCHANGE" class="nav-link {% if filter_type == 'EXCHANGE' %}active bg-success{% endif %}">
-                <i class="fa-solid fa-right-left me-1"></i> Trocas
-            </a>
-            <a href="{% url 'marketplace:home' %}?type=AUCTION" class="nav-link {% if filter_type == 'AUCTION' %}active bg-success{% endif %}">
-                <i class="fa-solid fa-gavel me-1"></i> Leilões
-            </a>
+<!-- BARRA DE PESQUISA -->
+<form method="get" action="{% url 'marketplace:home' %}" class="mb-4">
+  {% if tipo_filtro and tipo_filtro != 'ALL' %}
+    <input type="hidden" name="tipo" value="{{ tipo_filtro }}">
+  {% endif %}
+  <div class="input-group input-group-lg shadow-sm">
+    <input type="text" name="q" value="{{ busca }}" class="form-control border-2" placeholder="Pesquisar por produtos, animais, máquinas ou leilões...">
+    <button class="btn btn-success fw-bold px-4" type="submit">
+      <i class="fa-solid fa-magnifying-glass me-1"></i> Buscar
+    </button>
+  </div>
+</form>
+
+<!-- GRID DE ABAS / FILTROS DE COMÉRCIO -->
+<div class="row g-2 mb-4">
+  <!-- Aba: Todos -->
+  <div class="col-6 col-md">
+    <a href="{% url 'marketplace:home' %}?tipo=ALL{% if busca %}&q={{ busca }}{% endif %}" 
+       class="btn w-100 py-3 fw-bold fs-6 d-flex align-items-center justify-content-center gap-2 border shadow-sm {% if tipo_filtro == 'ALL' %}btn-success text-white{% else %}btn-white bg-white text-dark{% endif %}">
+      <i class="fa-solid fa-border-all fs-5"></i> Todos
+    </a>
+  </div>
+
+  <!-- Aba: Produtos -->
+  <div class="col-6 col-md">
+    <a href="{% url 'marketplace:home' %}?tipo=PRODUCT{% if busca %}&q={{ busca }}{% endif %}" 
+       class="btn w-100 py-3 fw-bold fs-6 d-flex align-items-center justify-content-center gap-2 border shadow-sm {% if tipo_filtro == 'PRODUCT' %}btn-info text-white{% else %}btn-white bg-white text-dark{% endif %}">
+      <i class="fa-solid fa-box-open fs-5 text-info"></i> Produtos
+    </a>
+  </div>
+
+  <!-- Aba: Venda -->
+  <div class="col-6 col-md">
+    <a href="{% url 'marketplace:home' %}?tipo=SALE{% if busca %}&q={{ busca }}{% endif %}" 
+       class="btn w-100 py-3 fw-bold fs-6 d-flex align-items-center justify-content-center gap-2 border shadow-sm {% if tipo_filtro == 'SALE' %}btn-primary text-white{% else %}btn-white bg-white text-dark{% endif %}">
+      <i class="fa-solid fa-tag fs-5 text-primary"></i> Vendas
+    </a>
+  </div>
+
+  <!-- Aba: Leilão -->
+  <div class="col-6 col-md">
+    <a href="{% url 'marketplace:home' %}?tipo=AUCTION{% if busca %}&q={{ busca }}{% endif %}" 
+       class="btn w-100 py-3 fw-bold fs-6 d-flex align-items-center justify-content-center gap-2 border shadow-sm {% if tipo_filtro == 'AUCTION' %}btn-danger text-white{% else %}btn-white bg-white text-dark{% endif %}">
+      <i class="fa-solid fa-gavel fs-5 text-danger"></i> Leilões
+    </a>
+  </div>
+
+  <!-- Aba: Troca -->
+  <div class="col-6 col-md">
+    <a href="{% url 'marketplace:home' %}?tipo=EXCHANGE{% if busca %}&q={{ busca }}{% endif %}" 
+       class="btn w-100 py-3 fw-bold fs-6 d-flex align-items-center justify-content-center gap-2 border shadow-sm {% if tipo_filtro == 'EXCHANGE' %}btn-warning text-dark{% else %}btn-white bg-white text-dark{% endif %}">
+      <i class="fa-solid fa-right-left fs-5 text-warning"></i> Trocas
+    </a>
+  </div>
+</div>
+
+<!-- GRID DE ANÚNCIOS -->
+<div class="row g-4">
+  {% for announcement in announcements %}
+    <div class="col-12 col-md-6 col-lg-4">
+      <div class="card h-100 shadow-sm border-0">
+        <div class="card-body d-flex flex-column p-4">
+          
+          <!-- Badge com o tipo do anúncio -->
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            {% if announcement.listing_type == 'SALE' %}
+              <span class="badge bg-primary fs-6 px-3 py-2"><i class="fa-solid fa-tag me-1"></i> Venda</span>
+            {% elif announcement.listing_type == 'AUCTION' %}
+              <span class="badge bg-danger fs-6 px-3 py-2"><i class="fa-solid fa-gavel me-1"></i> Leilão</span>
+            {% elif announcement.listing_type == 'EXCHANGE' %}
+              <span class="badge bg-warning text-dark fs-6 px-3 py-2"><i class="fa-solid fa-right-left me-1"></i> Troca</span>
+            {% endif %}
+            <small class="text-muted"><i class="fa-solid fa-user me-1"></i> {{ announcement.seller.username }}</small>
+          </div>
+
+          <!-- Título e Descrição do Item -->
+          <h4 class="card-title fw-bold mb-2">{{ announcement.item.title }}</h4>
+          <p class="card-text text-muted small flex-grow-1 mb-3">
+            {{ announcement.item.description|truncatewords:15 }}
+          </p>
+
+          <hr class="my-3">
+
+          <!-- Valores / Detalhes de Acordo com o Tipo -->
+          <div class="mb-3">
+            {% if announcement.listing_type == 'SALE' %}
+              <small class="text-muted d-block fw-semibold">Preço de Venda:</small>
+              <span class="fs-3 fw-bold text-success">R$ {{ announcement.price }}</span>
+            
+            {% elif announcement.listing_type == 'AUCTION' %}
+              <small class="text-muted d-block fw-semibold">Maior Lance Atual:</small>
+              <span class="fs-3 fw-bold text-danger">
+                R$ {{ announcement.highest_bid.amount|default:announcement.starting_bid }}
+              </span>
+              {% if announcement.is_auction_active %}
+                <small class="d-block text-danger mt-1">
+                  <i class="fa-solid fa-clock me-1"></i>Encerra em: {{ announcement.auction_end|date:"d/m H:i" }}
+                </small>
+              {% else %}
+                <small class="d-block text-secondary fw-bold mt-1">
+                  <i class="fa-solid fa-lock me-1"></i> Encerrado
+                </small>
+              {% endif %}
+
+            {% elif announcement.listing_type == 'EXCHANGE' %}
+              <small class="text-muted d-block fw-semibold">Deseja em Troca:</small>
+              <span class="fw-bold text-dark fs-6">{{ announcement.desired_item_desc|default:"Aceita propostas"|truncatewords:8 }}</span>
+            {% endif %}
+          </div>
+
+          <!-- Botão Principal de Visualização -->
+          <a href="{% url 'marketplace:detail' pk=announcement.pk %}" class="btn btn-outline-success btn-lg w-100 fw-bold mt-auto">
+            Ver Detalhes <i class="fa-solid fa-arrow-right ms-1"></i>
+          </a>
+
         </div>
+      </div>
     </div>
-</div>
-
-<!-- Grid de Anúncios -->
-<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-    {% for announcement in announcements %}
-        <div class="col">
-            <div class="card h-100 shadow-sm border-0">
-                <div class="card-body">
-                    <!-- Badge por Modalidade -->
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        {% if announcement.listing_type == 'SALE' %}
-                            <span class="badge bg-primary"><i class="fa-solid fa-tag me-1"></i> Venda</span>
-                        {% elif announcement.listing_type == 'EXCHANGE' %}
-                            <span class="badge bg-warning text-dark"><i class="fa-solid fa-right-left me-1"></i> Troca</span>
-                        {% else %}
-                            <span class="badge bg-danger"><i class="fa-solid fa-gavel me-1"></i> Leilão</span>
-                        {% endif %}
-                        <small class="text-muted"><i class="fa-regular fa-clock me-1"></i>{{ announcement.created_at|date:"d/m/Y" }}</small>
-                    </div>
-
-                    <h5 class="card-title fw-bold">{{ announcement.item.title }}</h5>
-                    <p class="card-text text-secondary small">{{ announcement.item.description|truncatewords:12 }}</p>
-
-                    <hr class="my-2">
-
-                    <!-- Informações Específicas -->
-                    {% if announcement.listing_type == 'SALE' %}
-                        <div class="text-success fw-bold fs-4">R$ {{ announcement.price }}</div>
-                    {% elif announcement.listing_type == 'AUCTION' %}
-                        <div class="mb-1">
-                            <small class="text-muted d-block">Lance Inicial:</small>
-                            <span class="fw-bold text-dark fs-5">R$ {{ announcement.starting_bid }}</span>
-                        </div>
-                        <small class="text-danger d-block">
-                            <i class="fa-solid fa-hourglass-half me-1"></i>Encerra: {{ announcement.auction_end|date:"d/m/Y H:i" }}
-                        </small>
-                    {% elif announcement.listing_type == 'EXCHANGE' %}
-                        <small class="text-muted d-block"><strong>Aceita em troca:</strong></small>
-                        <p class="small text-dark mb-0">{{ announcement.desired_item_desc|truncatewords:8 }}</p>
-                    {% endif %}
-                </div>
-
-                <div class="card-footer bg-white border-top-0 pt-0 pb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <small class="text-muted"><i class="fa-solid fa-user me-1"></i>{{ announcement.seller.username }}</small>
-                    </div>
-                    <a href="{% url 'marketplace:detail' pk=announcement.pk %}" class="btn btn-outline-success btn-sm w-100">
-                        Ver Detalhes
-                    </a>
-                </div>
-            </div>
-        </div>
-    {% empty %}
-        <div class="col-12 w-100">
-            <div class="alert alert-info text-center my-4 py-4">
-                <i class="fa-solid fa-circle-info fa-2x mb-2 d-block"></i>
-                Nenhum anúncio cadastrado nesta modalidade até o momento.
-            </div>
-        </div>
-    {% endfor %}
+  {% empty %}
+    <div class="col-12 text-center py-5">
+      <div class="bg-white p-5 rounded-3 border shadow-sm">
+        <i class="fa-solid fa-store-slash text-muted fs-1 mb-3"></i>
+        <h4 class="fw-bold text-secondary">Nenhum anúncio encontrado nesta categoria.</h4>
+        <p class="text-muted">Tente alternar entre as abas acima para ver outros tipos de negociação.</p>
+      </div>
+    </div>
+  {% endfor %}
 </div>
 {% endblock %}
